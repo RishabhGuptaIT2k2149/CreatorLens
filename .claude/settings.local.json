@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(/Users/rishabh/Desktop/creatorlens/backend/venv/bin/pip list *)",
+      "Bash(/Users/rishabh/Desktop/creatorlens/venv/bin/pip list *)",
+      "Bash(npm --version)",
+      "Bash(npm create *)",
+      "Bash(npm install *)"
+    ]
+  }
+}

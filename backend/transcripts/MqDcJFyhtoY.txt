@@ -1,0 +1,5 @@
+Switching over to our fourth screwdriver bit, a flat head to remove the standoff screw. These are basically for holding a screw within a screw. Screw-ception, where one screw screws into another screw for holding multiple layers of components.
+
+With the standoffs screws removed, we can pop out the Taptic Engine vibrator. I did some counting after this teardown was all over, and there are more than 70 different size screws in this iPhone 17 Pro, so forgive me if I don't mark the location of all of them this time around.
+
+If you ever happen to find yourself this deep in an iPhone 17 Pro, you need way more help than I can give or an exorcist.
