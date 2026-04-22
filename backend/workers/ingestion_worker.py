@@ -9,9 +9,35 @@ from db.models import BrandMention, Channel, IngestionJob, SponsorshipSegment, V
 from services.chunker import chunk_transcript
 from services.extractor import extract_brands
 from services.sponsorship import detect_sponsorships
-from services.transcriber import transcribe_video
+from services.transcriber import TRANSCRIPTS_DIR, transcribe_video
 from services.vector_store import upsert_chunks
 from services.youtube import list_video_ids, resolve_channel
+
+
+def _run_extraction(db, vid_id: str, transcript: str) -> None:
+    """Run brand extraction + sponsorship detection and persist results."""
+    time.sleep(settings.RATE_LIMIT_DELAY_SEC)
+    try:
+        mentions = extract_brands(transcript, vid_id)
+        db.query(BrandMention).filter_by(video_id=vid_id).delete()
+        for m in mentions:
+            db.add(BrandMention(**m))
+        db.commit()
+        print(f"  [ok] {len(mentions)} brand mentions")
+    except Exception as exc:
+        print(f"  [warn] brand extraction failed: {exc}")
+
+    time.sleep(settings.RATE_LIMIT_DELAY_SEC)
+    try:
+        segments = detect_sponsorships(transcript, vid_id)
+        db.query(SponsorshipSegment).filter_by(video_id=vid_id).delete()
+        for s in segments:
+            db.add(SponsorshipSegment(**s))
+        db.commit()
+        if segments:
+            print(f"  [ok] {len(segments)} sponsorship segments")
+    except Exception as exc:
+        print(f"  [warn] sponsorship detection failed: {exc}")
 
 
 def run_ingestion(channel_url: str, job_id: int | None = None, max_videos: int | None = None) -> dict:
@@ -91,14 +117,33 @@ def run_ingestion(channel_url: str, job_id: int | None = None, max_videos: int |
                 db.commit()
                 db.refresh(video_row)
 
-            # Skip if already successfully processed
-            if video_row.transcription_status == "ok":
-                print(f"  [skip] already transcribed")
+            # Case 1: fully processed — skip entirely
+            if video_row.transcription_status == "ok" and video_row.extraction_done:
+                print(f"  [skip] already processed")
                 job.progress = idx + 1
                 db.commit()
                 continue
 
-            # Transcribe
+            # Case 2: transcribed but extraction not done — load from disk, skip Gemini transcription
+            if video_row.transcription_status == "ok" and not video_row.extraction_done:
+                transcript_path = TRANSCRIPTS_DIR / f"{vid_id}.txt"
+                if transcript_path.exists():
+                    transcript_text = transcript_path.read_text(encoding="utf-8")
+                    _run_extraction(db, vid_id, transcript_text)
+                    video_row.extraction_done = True
+                    db.commit()
+                    print(f"  [ok] extraction backfilled from saved transcript")
+                else:
+                    print(f"  [warn] transcript file missing, re-transcribing")
+                    video_row.transcription_status = "pending"
+                    db.commit()
+
+                if video_row.transcription_status == "ok":
+                    job.progress = idx + 1
+                    db.commit()
+                    continue
+
+            # Case 3: not yet transcribed — full pipeline
             result = transcribe_video(vid_id, save_to_disk=True)
             video_row.transcription_status = result["status"]
             video_row.word_count = result["word_count"]
@@ -114,37 +159,14 @@ def run_ingestion(channel_url: str, job_id: int | None = None, max_videos: int |
             # Chunk + embed + upsert
             chunks = chunk_transcript(result["transcript"], vid_id)
             upsert_chunks(channel_id, chunks)
-            print(
-                f"  [ok] {result['word_count']} words → {len(chunks)} chunks ingested"
-            )
+            print(f"  [ok] {result['word_count']} words → {len(chunks)} chunks ingested")
 
             job.progress = idx + 1
             db.commit()
 
-            # Brand extraction
-            time.sleep(settings.RATE_LIMIT_DELAY_SEC)
-            try:
-                mentions = extract_brands(result["transcript"], vid_id)
-                db.query(BrandMention).filter_by(video_id=vid_id).delete()
-                for m in mentions:
-                    db.add(BrandMention(**m))
-                db.commit()
-                print(f"  [ok] {len(mentions)} brand mentions extracted")
-            except Exception as exc:
-                print(f"  [warn] brand extraction failed: {exc}")
-
-            # Sponsorship detection
-            time.sleep(settings.RATE_LIMIT_DELAY_SEC)
-            try:
-                segments = detect_sponsorships(result["transcript"], vid_id)
-                db.query(SponsorshipSegment).filter_by(video_id=vid_id).delete()
-                for s in segments:
-                    db.add(SponsorshipSegment(**s))
-                db.commit()
-                if segments:
-                    print(f"  [ok] {len(segments)} sponsorship segments detected")
-            except Exception as exc:
-                print(f"  [warn] sponsorship detection failed: {exc}")
+            _run_extraction(db, vid_id, result["transcript"])
+            video_row.extraction_done = True
+            db.commit()
 
         # ── 5. Finalise ─────────────────────────────────────────────────────
         channel.ingested_at = datetime.utcnow()

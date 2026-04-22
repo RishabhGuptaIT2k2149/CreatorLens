@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from db.database import Base
@@ -35,6 +35,7 @@ class Video(Base):
         String(16), default="pending"
     )  # pending | ok | no_speech | error
     word_count: Mapped[int] = mapped_column(Integer, default=0)
+    extraction_done: Mapped[bool] = mapped_column(Boolean, default=False)
 
     channel: Mapped[Channel] = relationship(back_populates="videos")
 
