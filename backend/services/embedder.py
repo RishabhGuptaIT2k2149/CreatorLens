@@ -1,32 +1,25 @@
 from __future__ import annotations
 
-from google import genai
+import requests
 
 from config import settings
 
-_client: genai.Client | None = None
-
-EMBED_MODEL = "models/embedding-001"
-
-
-def _get_client() -> genai.Client:
-    global _client
-    if _client is None:
-        _client = genai.Client(api_key=settings.GEMINI_API_KEY)
-    return _client
+_BASE = "https://generativelanguage.googleapis.com/v1/models/text-embedding-004:embedContent"
 
 
 def embed(texts: list[str]) -> list[list[float]]:
     """
-    Return embeddings via Gemini embedding-001 (768-dim).
-    Processes one text at a time — the embed API does not support batching.
+    Return 768-dim embeddings via Gemini text-embedding-004 REST API (v1).
+    Calls the endpoint directly to avoid the SDK's v1beta limitation.
     """
-    client = _get_client()
     results = []
     for text in texts:
-        response = client.models.embed_content(
-            model=EMBED_MODEL,
-            contents=text,
+        response = requests.post(
+            _BASE,
+            params={"key": settings.GEMINI_API_KEY},
+            json={"content": {"parts": [{"text": text}]}},
+            timeout=30,
         )
-        results.append(response.embeddings[0].values)
+        response.raise_for_status()
+        results.append(response.json()["embedding"]["values"])
     return results
