@@ -6,7 +6,7 @@ from config import settings
 
 _client: genai.Client | None = None
 
-EMBED_MODEL = "text-embedding-004"
+EMBED_MODEL = "models/embedding-001"
 
 
 def _get_client() -> genai.Client:
@@ -18,18 +18,15 @@ def _get_client() -> genai.Client:
 
 def embed(texts: list[str]) -> list[list[float]]:
     """
-    Return embeddings via Gemini text-embedding-004.
-    Processes in batches of 100 to stay within API limits.
-    Output dimension: 768.
+    Return embeddings via Gemini embedding-001 (768-dim).
+    Processes one text at a time — the embed API does not support batching.
     """
     client = _get_client()
     results = []
-    batch_size = 100
-    for i in range(0, len(texts), batch_size):
-        batch = texts[i : i + batch_size]
+    for text in texts:
         response = client.models.embed_content(
             model=EMBED_MODEL,
-            contents=batch,
+            contents=text,
         )
-        results.extend(e.values for e in response.embeddings)
+        results.append(response.embeddings[0].values)
     return results
