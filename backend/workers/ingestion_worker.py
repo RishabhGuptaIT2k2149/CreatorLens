@@ -145,12 +145,18 @@ def run_ingestion(channel_url: str, job_id: int | None = None, max_videos: int |
 
             # Case 3: not yet transcribed — full pipeline
             result = transcribe_video(vid_id, save_to_disk=True)
-            video_row.transcription_status = result["status"]
-            video_row.word_count = result["word_count"]
+            if result["status"] == "ok":
+                video_row.transcription_status = "ok"
+                video_row.word_count = result["word_count"]
+            elif result["status"] == "no_speech":
+                video_row.transcription_status = "no_speech"
+                video_row.word_count = 0
+            # "error" → leave as "pending" so next run retries
             db.commit()
 
             if result["status"] != "ok":
-                print(f"  [skip] transcription status: {result['status']}")
+                print(f"  [skip] transcription status: {result['status']} — {result.get('error', '')}")
+                video_row.transcription_status = "pending"
                 job.progress = idx + 1
                 db.commit()
                 time.sleep(settings.RATE_LIMIT_DELAY_SEC)
