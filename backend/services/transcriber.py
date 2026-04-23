@@ -8,8 +8,10 @@ from config import settings
 
 _client: genai.Client | None = None
 
-TRANSCRIPTS_DIR = Path(__file__).resolve().parent.parent / "transcripts"
-TRANSCRIPTS_DIR.mkdir(exist_ok=True)
+import os
+_default_transcripts = Path(__file__).resolve().parent.parent / "transcripts"
+TRANSCRIPTS_DIR = Path(os.getenv("TRANSCRIPTS_DIR", str(_default_transcripts)))
+TRANSCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
 
 PROMPT = """Transcribe this YouTube video into clean, readable text.
 

@@ -4,6 +4,8 @@ __pycache__/
 *.pyo
 backend/venv/
 backend/chroma_db/
+backend/creatorlens.db
+backend/transcripts/
 
 # Env
 .env
