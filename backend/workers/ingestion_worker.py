@@ -194,7 +194,9 @@ def run_ingestion(channel_url: str, job_id: int | None = None, max_videos: int |
     except Exception as exc:
         if "job" in dir():
             job.status = "error"
-            job.error = str(exc)
+            error_type = type(exc).__name__
+            error_msg = str(exc)[:300]
+            job.error = f"{error_type}: {error_msg}"
             db.commit()
         raise
     finally:
